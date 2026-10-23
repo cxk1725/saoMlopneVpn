@@ -9,6 +9,13 @@
 KIT_DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$KIT_DIR" || exit 1
 
+# 面板包以分卷形式随仓库分发，先还原
+if [ ! -f file_8.15/web-8.15.zip ] && ls file_8.15/web-8.15.zip.part-* >/dev/null 2>&1; then
+    echo "== [0/4] 合并面板包分卷 =="
+    cat file_8.15/web-8.15.zip.part-* > file_8.15/web-8.15.zip || exit 1
+    echo "  已还原: $(du -h file_8.15/web-8.15.zip | cut -f1)"
+fi
+
 echo "== [1/4] 资源自检 =="
 MISS=0
 check() { if [ -f "$1" ]; then echo "  OK   $1"; else echo "  缺失 $1"; MISS=1; fi; }

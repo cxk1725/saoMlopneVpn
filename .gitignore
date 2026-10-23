@@ -11,3 +11,7 @@ Thumbs.db
 
 # 分析记录（不属于部署套件）
 .workbuddy/
+
+# 面板包原件：仓库里以 5MB 分卷存放（单文件 48MB 整包推送易超时），
+# Dockerfile / offline_install.sh 会自动合并
+file_8.15/web-8.15.zip

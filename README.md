@@ -13,6 +13,9 @@
 | 隔离性 | 特权容器（等同轻量虚拟机） | 原生 |
 | 适合 | 新机器、要迁移、要多环境 | 已有 CentOS 7、追求最少层 |
 
+> 面板包以分卷形式随仓库分发，Docker 构建和 `offline_install.sh` 都会自动合并，
+> 无需手动处理。要单独还原：`bash file_8.15/merge-parts.sh`
+
 > **cgroup v1 是硬前提**：`centos:7` 里的 systemd 219 不支持 cgroup v2。
 > CentOS 7/8、Ubuntu 20.04、Debian 11 默认都是 v1；Ubuntu 22.04+ / Debian 12 默认 v2，需要先切回。
 
@@ -97,7 +100,7 @@ tar xf saoml-backup-*.tar && cd saoml-backup-* && bash restore.sh
 ├── offline_http_server.py      # 资源伺服器 Python 备选
 ├── oss_yum_public/             # yum 源配置 + unzip
 ├── oss_yum_php_el7/            # php70w 仓库（49 rpm）
-└── file_8.15/web-8.15.zip      # 面板程序包
+└── file_8.15/                  # 面板程序包（48 MB，拆成 10 个 5 MB 分卷）
 ```
 
 ## 部署后
