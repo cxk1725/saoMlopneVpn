@@ -71,7 +71,7 @@ def collect_files():
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in skip_dirs]
         for fn in filenames:
-            if fn in ("push_via_api.py",):
+            if fn in ("push_via_api.py", ".push_cache.json"):
                 continue
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, ROOT).replace("\\", "/")
@@ -109,34 +109,51 @@ def main():
         print("      已创建初始提交 %s" % parent_sha[:8])
 
     # 3. 上传 blob
-    # 超过阈值的文件走不通（代理会在长连接上截断 60MB+ 的请求体），
-    # 由 split_large.py 拆成分卷后再推，或由用户本地 git push。
+    # 超过阈值的文件走不通（代理会在长连接上截断大请求体），
+    # 仓库里已改为分卷存放，单个 blob 保持在 10 MB 以内。
     MAX_MB = int(os.environ.get("MAX_BLOB_MB", "10"))
     MAX_BYTES = MAX_MB * 1024 * 1024
     files = collect_files()
     skipped = [(r, f) for r, f in files if os.path.getsize(f) > MAX_BYTES]
     files = [(r, f) for r, f in files if os.path.getsize(f) <= MAX_BYTES]
     total = len(files)
-    print("[2/5] 上传 %d 个文件（跳过 %d 个超过 %d MB 的）" % (total, len(skipped), MAX_MB))
+
+    # 断点续传：已上传成功的 blob 记在 .push_cache.json 里，中断后重跑不重复传
+    cache_path = os.path.join(ROOT, ".push_cache.json")
+    cache = {}
+    if os.path.exists(cache_path):
+        try:
+            cache = json.loads(open(cache_path, encoding="utf-8").read())
+        except Exception:
+            cache = {}
+    print("[2/5] 上传 %d 个文件（已缓存 %d，跳过 %d 个超限）"
+          % (total, len(cache), len(skipped)))
     for r, f in skipped:
         print("      跳过 %-40s %6.1f MB" % (r, os.path.getsize(f) / 1048576.0))
+
     tree = []
     for i, (rel, full) in enumerate(files, 1):
         size = os.path.getsize(full)
-        for attempt in range(3):
+        if rel in cache:
+            tree.append({"path": rel, "mode": "100644", "type": "blob", "sha": cache[rel]})
+            continue
+        for attempt in range(4):
             try:
                 content = base64.b64encode(open(full, "rb").read()).decode("ascii")
                 r = api("POST", "/repos/%s/%s/git/blobs" % (OWNER, REPO),
                         {"content": content, "encoding": "base64"})
                 tree.append({"path": rel, "mode": "100644", "type": "blob", "sha": r["sha"]})
-                if size > 1024 * 1024 or i % 20 == 0:
-                    print("      [%d/%d] %-45s %8.1f MB" % (i, total, rel[-45:], size / 1048576.0))
+                cache[rel] = r["sha"]
+                json.dump(cache, open(cache_path, "w", encoding="utf-8"))
+                print("      [%d/%d] %-42s %7.2f MB" % (i, total, rel[-42:], size / 1048576.0))
                 break
             except Exception as e:
-                if attempt == 2:
+                if attempt == 3:
+                    json.dump(cache, open(cache_path, "w", encoding="utf-8"))
                     sys.exit("上传失败 %s: %s" % (rel, e))
-                print("      重试 %s (%s)" % (rel, str(e)[:80]))
-                time.sleep(3)
+                wait = 5 * (attempt + 1)
+                print("      重试(%d) %s：%s" % (attempt + 1, rel, str(e)[:70]))
+                time.sleep(wait)
 
     # 4. 建 tree / commit
     print("[3/5] 创建 tree")

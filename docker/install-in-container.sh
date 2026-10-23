@@ -108,10 +108,22 @@ if [ -f /var/www/html/config.php ]; then
     # 不生成的话，下载站上会是未注入地址的模板包（装上就"没网"）。
     DBPASS=$(sed -n 's/.*define("_pass_","\([^"]*\)".*/\1/p' /var/www/html/config.php 2>/dev/null | head -1)
     DBNAME=$(sed -n 's/.*define("_ov_","\([^"]*\)".*/\1/p' /var/www/html/config.php 2>/dev/null | head -1)
-    HOST=$(mysql -uroot -p"$DBPASS" "${DBNAME:-vpndata}" -N -e \
-           "select value from map where \`key\`='host'" 2>/dev/null | head -1)
-    APP_IP=$(printf '%s' "$HOST" | sed -E 's#^https?://##; s#[:/].*$##')
-    APP_PORT=$(printf '%s' "$HOST" | sed -nE 's#^[^:]+:([0-9]+).*#\1#p')
+    DB=${DBNAME:-vpndata}
+
+    # 真实公网地址在 web_fwq.ipport（安装器自己检测到的）；
+    # map.host 在全新安装时是中文占位「流控地址」，直接注入会产出废包。
+    FWQ=$(mysql -uroot -p"$DBPASS" "$DB" -N -e \
+          "select ipport from web_fwq order by id limit 1" 2>/dev/null | head -1)
+    APP_IP=${FWQ%%:*}
+    APP_PORT=${FWQ##*:}
+
+    if ! printf '%s' "$APP_IP" | LC_ALL=C grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+        HOST=$(mysql -uroot -p"$DBPASS" "$DB" -N -e \
+               "select value from map where \`key\`='host'" 2>/dev/null | head -1)
+        APP_IP=$(printf '%s' "$HOST" | sed -E 's#^https?://##; s#[:/].*$##')
+        APP_PORT=$(printf '%s' "$HOST" | sed -nE 's#^[^:]+:([0-9]+).*#\1#p')
+    fi
+    APP_PORT=${APP_PORT:-1024}
 
     if [ -n "$APP_IP" ] && [ -f "$PANEL_SRC/build-apk.sh" ]; then
         echo "== 生成安装包（$APP_IP:${APP_PORT:-1024}）..."

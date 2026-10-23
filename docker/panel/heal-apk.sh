@@ -48,14 +48,23 @@ done
 HOST=$(mysql -uroot -p"$DBPASS" "$DBNAME" -N -e \
        "select value from map where \`key\`='host'" 2>/dev/null | head -1)
 
-if [ -z "$HOST" ]; then
-    log "读取 host 配置失败，跳过自愈"
+# 优先取 web_fwq.ipport：安装器检测到的真实公网地址。
+# map.host 在全新安装时是中文占位「流控地址」，注进去等于没修。
+FWQ=$(mysql -uroot -p"$DBPASS" "$DBNAME" -N -e \
+      "select ipport from web_fwq order by id limit 1" 2>/dev/null | head -1)
+IP=${FWQ%%:*}
+PORT=${FWQ##*:}
+
+if ! printf '%s' "$IP" | LC_ALL=C grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+    IP=$(printf '%s' "$HOST" | sed -E 's#^https?://##; s#[:/].*$##')
+    PORT=$(printf '%s' "$HOST" | sed -nE 's#^[^:]+:([0-9]+).*#\1#p')
+fi
+PORT=${PORT:-1024}
+
+if ! printf '%s' "$IP" | LC_ALL=C grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+    log "找不到可用的公网 IP（web_fwq/map.host 均为空或占位符），跳过自愈"
     exit 1
 fi
-
-IP=$(printf '%s' "$HOST" | sed -E 's#^https?://##; s#[:/].*$##')
-PORT=$(printf '%s' "$HOST" | sed -nE 's#^[^:]+:([0-9]+).*#\1#p')
-PORT=${PORT:-1024}
 
 [ -n "$IP" ] || { log "host 解析失败: $HOST"; exit 1; }
 

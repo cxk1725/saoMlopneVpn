@@ -64,7 +64,7 @@ RUN yum -y install \
         curl wget unzip tar which \
         procps-ng net-tools lsof gawk dos2unix expect \
         iproute psmisc util-linux \
-        e2fsprogs openssh-server \
+        e2fsprogs openssh-server openssh-clients \
     && yum clean all \
     && rm -rf /var/cache/yum /tmp/*
 
@@ -95,12 +95,11 @@ RUN sed -i 's/^#Port 22/Port 2222/' /etc/ssh/sshd_config \
 # ------------------------------------------------------------
 COPY . /opt/offline_kit
 
-# 面板包以分卷形式随仓库分发（单文件 48 MB 整包推送易超时），构建时还原
+# 面板包也支持分卷形态（仓库分发用）：有整包就跳过，只有分卷就合并
 RUN cd /opt/offline_kit/file_8.15 \
     && if [ ! -f web-8.15.zip ] && ls web-8.15.zip.part-* >/dev/null 2>&1; then \
          cat web-8.15.zip.part-* > web-8.15.zip; \
-       fi \
-    && ls -lh /opt/offline_kit/file_8.15/web-8.15.zip
+       fi
 
 RUN chmod +x /opt/offline_kit/httpserver \
              /opt/offline_kit/xsaoml \

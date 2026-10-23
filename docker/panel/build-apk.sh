@@ -45,6 +45,19 @@ fail() {
 
 [ -n "$IP" ]   || fail "缺少 IP 参数"
 [ -n "$PORT" ] || fail "缺少端口参数"
+
+# IP / 域名合法性校验。
+# 全新安装的数据库里 map.host 默认是中文占位值「流控地址」，
+# 直接拿来注入会生成一个「http://流控地址:1024」的废包 —— 装上照样没网，
+# 而且占位符 IP:PORT 消失后看起来像"注入成功"。这里直接拦住。
+if ! printf '%s' "$IP" | LC_ALL=C grep -qE \
+     '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$'; then
+    fail "IP/域名不合法：'$IP'（不能是中文或占位符，否则 APP 连不上）"
+fi
+if ! printf '%s' "$PORT" | LC_ALL=C grep -qE '^[0-9]{1,5}$'; then
+    fail "端口不合法：'$PORT'"
+fi
+
 [ -f "$TPL_DIR/apktool.jar" ] || fail "缺少 apktool.jar"
 [ -f "$TPL_DIR/saoml.apk" ]   || fail "缺少模板 saoml.apk"
 

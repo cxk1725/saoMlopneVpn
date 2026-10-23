@@ -367,7 +367,23 @@ docker exec saoml sh -c "unzip -p /var/www/html/saoml.apk resources.arsc | strin
 # 异常： http://IP:PORT
 ```
 
-### 11.4 排错
+### 11.4 服务器地址从哪里取
+
+APK 里的 `server_host` 必须是一个**真实可达的 IP 或域名**。取值的优先级：
+
+1. `web_fwq.ipport` —— 安装器自己检测到的公网地址（如 `47.120.35.74:1024`），**首选**
+2. `map.host` —— 后台「APP 设置」里的服务器地址，**全新安装时默认是中文占位「流控地址」**
+
+`build-apk.sh` 会校验 IP 格式，中文占位符直接拒绝：
+
+```
+[失败] IP/域名不合法：'流控地址'（不能是中文或占位符，否则 APP 连不上）
+```
+
+所以看到这个报错，去后台把「APP 设置 → 服务器地址」填成真实 IP，
+或者确认 `web_fwq` 表里有正确记录。
+
+### 11.5 排错
 
 ```bash
 docker exec saoml cat /tmp/saoml-apk.log

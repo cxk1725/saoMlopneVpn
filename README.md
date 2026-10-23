@@ -131,6 +131,8 @@ docker exec saoml grep -aE "管理员密码|管理员地址|数据库密码" /va
 | 6 | 后台生成软件失败 | 脚本在根目录 `mkdir /APP`，httpd 是 apache 身份，无权限 |
 | 7 | **APP 装上没网** | 生成失败后仍报"成功"，把未注入地址的模板包放上了下载站 |
 | 8 | 应用名含 `&` 时打包失败 | XML 实体未转义，原脚本静默失败 |
+| 9 | 安装中途 `ssh: command not found` | 镜像只装了 `openssh-server`，安装脚本要用 `ssh` 建真实会话 |
+| 10 | APK 地址变成 `http://流控地址:1024` | 新装库里 `map.host` 是中文占位符，真实 IP 在 `web_fwq.ipport` |
 
 第 7、8 条是同一个根因：原脚本不检查 apktool/signapk 返回码，失败也报"编译成功"。
 `docker/panel/build-apk.sh` 现在会校验 APK 里确实注入了服务器地址，校验不过就保留旧包，
