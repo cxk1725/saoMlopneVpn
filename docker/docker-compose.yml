@@ -1,0 +1,61 @@
+# ============================================================
+#  SaoML 8.15 容器编排（方案 A：整机封装）
+#
+#  用法：
+#    cd docker
+#    docker compose up -d --build
+#
+#  前提：宿主机必须是 cgroup v1（否则 centos:7 的 systemd 起不来）
+#        先运行：bash docker/check-host.sh
+# ============================================================
+# 固定项目名：数据卷名恒为 docker_saoml_*，与目录名无关，
+# 这样迁移/恢复脚本可以在任意路径下还原数据卷。
+# ============================================================
+name: docker
+
+services:
+  saoml:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: saoml:8.15
+    container_name: saoml
+    hostname: saoml
+
+    # VPN 网关类应用必须：特权 + 宿主网络 + tun 设备
+    privileged: true
+    network_mode: host
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    # systemd 219 只支持 cgroup v1；host 模式让容器使用宿主 cgroup 层级
+    cgroup: host
+
+    restart: unless-stopped
+
+    volumes:
+      # systemd 需要可写的 cgroup 挂载
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      # 业务数据（必须持久化）
+      - saoml_mysql:/var/lib/mysql
+      - saoml_openvpn:/etc/openvpn
+      - saoml_www:/var/www
+      - saoml_state:/var/lib/saoml
+      - saoml_log:/var/log
+
+    tmpfs:
+      - /run
+      # 必须带 exec：apktool 打包 APK 时要执行临时 jar，
+      # noexec 会导致后台「生成软件」失败（could not exec: /tmp/brut_util_Jar_xxx.tmp）
+      - /tmp:exec,mode=1777
+
+    # systemd 容器的标准停止信号与宽限期
+    stop_signal: SIGRTMIN+3
+    stop_grace_period: 3m
+
+volumes:
+  saoml_mysql:
+  saoml_openvpn:
+  saoml_www:
+  saoml_state:
+  saoml_log:

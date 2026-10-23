@@ -1,0 +1,36 @@
+#!/usr/bin/expect -f
+# ============================================================
+#  SaoML 安装器自动应答（必须在真实 SSH 会话里运行）
+#  由 install-in-container.sh 通过 ssh -tt 调起
+#
+#  可用环境变量：
+#    SAOML_DB_PASS   数据库密码（默认 Saoml2026Test!x）
+#    SAOML_APP_NAME  APP 名称（默认 SaoML加速器）
+# ============================================================
+set timeout 1800
+set env(TERM) xterm
+log_user 1
+
+if {[info exists env(SAOML_DB_PASS)]} {
+    set dbpass $env(SAOML_DB_PASS)
+} else {
+    set dbpass "Saoml2026Test!x"
+}
+if {[info exists env(SAOML_APP_NAME)]} {
+    set appname $env(SAOML_APP_NAME)
+} else {
+    set appname ""
+}
+
+spawn bash /opt/offline_kit/cracked_stage5.sh
+
+expect {
+    -re {SaoML官网按回车进行验证}      { send "ml.saoml.com.cn\r"; exp_continue }
+    -re {请输入数字 \[1-2\]}            { send "1\r"; exp_continue }
+    -re {请设置管理员后台地址}          { send "\r"; exp_continue }
+    -re {请设置数据库密码}              { send "$dbpass\r"; exp_continue }
+    -re {请设置APP名称}                 { send "$appname\r"; exp_continue }
+    -re {已阅读,请回车开始继续}         { send "\r"; exp_continue }
+    timeout { puts "\n===TIMEOUT==="; exit 2 }
+    eof     { puts "\n===DONE==="; exit 0 }
+}

@@ -1,0 +1,4 @@
+.workbuddy/
+*.tar
+*.tar.gz
+*.log

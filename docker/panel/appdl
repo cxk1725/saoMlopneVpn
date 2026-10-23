@@ -1,0 +1,4 @@
+#!/bin/bash
+# 面板代理版生成入口 → 输出 daili.apk，第 5 个参数是代理 key
+# 原生脚本会把模板里的 dailikey 替换成该 key，这里保持一致
+exec bash /opt/offline_kit/docker/panel/build-apk.sh daili.apk "${1:-}" "${2:-}" "${3:-}" "${4:-}" "${5:-}"

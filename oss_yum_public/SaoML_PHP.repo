@@ -1,0 +1,6 @@
+[SaoML_PHP]
+name=SaoML_PHP
+baseurl=http://oss.xq688.com.cn/yum/php/el7/
+enabled=1
+gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7

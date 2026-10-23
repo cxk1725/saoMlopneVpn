@@ -1,0 +1,4 @@
+#!/bin/bash
+# 面板「生成软件」入口（主站包）→ 转调加固版构建脚本
+# 参数与原生脚本一致：ip port 应用名 包名 [未使用]
+exec bash /opt/offline_kit/docker/panel/build-apk.sh saoml.apk "${1:-}" "${2:-}" "${3:-}" "${4:-}" ""

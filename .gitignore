@@ -1,0 +1,13 @@
+# 运行产物
+*.log
+*.tar
+*.tar.gz
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 分析记录（不属于部署套件）
+.workbuddy/
