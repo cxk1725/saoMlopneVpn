@@ -1,6 +1,6 @@
 # SaoML 8.15 离线部署套件
 
-把 SaoML 面板（PHP + MariaDB + OpenVPN 多节点）装进 Docker 容器，或者直接装在 CentOS 7 上。**所有安装资源已本地化**，作者域名 `xq688.com.cn` 挂了也能装完。
+把 SaoML 面板（PHP + MariaDB + OpenVPN 多节点）装进 Docker 容器，或者直接装在 CentOS 7 上。**所有安装资源已本地化**
 
 ## 两种部署方式
 
