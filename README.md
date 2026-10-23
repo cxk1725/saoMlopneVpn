@@ -1,5 +1,7 @@
 # SaoML 8.15 离线部署套件
 
+[![docker](https://github.com/cxk1725/saoMlopneVpn/actions/workflows/docker-build.yml/badge.svg)](https://github.com/cxk1725/saoMlopneVpn/actions/workflows/docker-build.yml)
+
 把 SaoML 面板（PHP + MariaDB + OpenVPN 多节点）装进 Docker 容器，或者直接装在 CentOS 7 上。**所有安装资源已本地化**
 
 ## 两种部署方式
@@ -53,6 +55,26 @@ ml.saoml.com.cn     ← 卡密验证
 
 完整说明见 **[docs/docker.md](docs/docker.md)**。
 
+#### 不想本地构建？直接用 CI 产出的镜像
+
+推送到 `main` 后 GitHub Actions 会自动构建并推到 GHCR，服务器上省掉那 5 分钟构建：
+
+```bash
+docker pull ghcr.io/cxk1725/saoml:8.15
+docker tag  ghcr.io/cxk1725/saoml:8.15 saoml:8.15   # compose 里写的就是 saoml:8.15
+cd docker && docker compose up -d
+```
+
+不能联网的机器：在 Actions 页面手动 **Run workflow** 勾选 `export_tar`，
+下载 artifact 后 `docker load`：
+
+```bash
+docker load < saoml-8.15-amd64.tar.gz
+docker tag  ghcr.io/cxk1725/saoml:8.15 saoml:8.15
+```
+
+构建逻辑见 [`.github/workflows/docker-build.yml`](.github/workflows/docker-build.yml)，细节见 [CI 自动构建](#ci-自动构建github-actions)。
+
 ### 方式二：CentOS 7 裸机
 
 ```bash
@@ -63,6 +85,31 @@ xsaoml                       # 或 bash cracked_stage5.sh
 ```
 
 完整说明见 **[docs/baremetal.md](docs/baremetal.md)**。
+
+## CI 自动构建（GitHub Actions）
+
+`.github/workflows/docker-build.yml` 负责把 `docker/Dockerfile` 打成镜像，**零密钥配置**（用仓库自带的 `GITHUB_TOKEN` 推 GHCR）：
+
+| 触发 | 行为 |
+|---|---|
+| push 到 `main` | 构建 → 冒烟校验 → 推送 `:latest` `:8.15` `:sha-xxxxxxx` |
+| push `v*` 标签 | 同上，额外按 semver 打标签（`v8.15` → `8.15`） |
+| Pull Request | 只构建 + 冒烟校验，不推送 |
+| 手动 Run workflow | 可勾选 `export_tar` 额外导出 `saoml-8.15-amd64.tar.gz` |
+
+冒烟校验在容器里跑（`--entrypoint /bin/bash`，不启 systemd），确认：离线套件可执行、
+10 个分卷已合并成 40MB+ 的 `web-8.15.zip`、`setenforce` 与 `/etc/selinux/config` 已修、
+sshd 在 2222、`.git` 没混进镜像。任一项不过就红，不会推出坏镜像。
+
+> **镜像只有 amd64**：`centos:7` 的 yum 源和官方安装器都是 x86_64，不做多架构。
+>
+> **拉不下来 403？** 首次推送后到 GitHub → Packages 把 `saoml` 包可见性设为 Public
+> （公开仓库一般会自动继承，私有仓库需手动）。
+>
+> **想换成 Docker Hub / 阿里云 ACR？** 改 workflow 里 `images:` 与登录步骤即可，
+> 账号密码放 `Settings → Secrets and variables → Actions`。
+>
+> **构建缓存**：用 `type=gha`，改脚本重跑通常 1 分钟内完成；Dockerfile 的 yum 层命中缓存就不再装包。
 
 ## 迁移 / 备份
 

@@ -70,6 +70,17 @@ docker build -f docker/Dockerfile -t saoml:8.15 .
 镜像只做三件事：换源、装 systemd 与基础工具、把离线套件拷进去。
 **SaoML 本身不在这里安装** —— 原因见第 4 节。
 
+> **跳过本地构建**：推送到 `main` 后 GitHub Actions 会自动构建并推到 GHCR，
+> 服务器上直接拉即可（镜像内容与本地 `docker build` 完全一致）：
+>
+> ```bash
+> docker pull ghcr.io/cxk1725/saoml:8.15
+> docker tag  ghcr.io/cxk1725/saoml:8.15 saoml:8.15
+> ```
+>
+> 仓库 Actions 页面的构建会先跑一遍冒烟校验（套件可执行、分卷已合并、sshd 在 2222），
+> 校验不过不会推送。离线场景在手动 Run workflow 时勾选 `export_tar` 下载 tar.gz。
+
 ---
 
 ## 4. 首次启动与安装

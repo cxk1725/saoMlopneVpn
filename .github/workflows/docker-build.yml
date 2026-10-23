@@ -1,0 +1,184 @@
+# ============================================================
+#  构建 SaoML 8.15 容器镜像（centos:7 + systemd + 离线套件）
+#
+#  触发与行为：
+#    push -> main       构建 + 冒烟校验 + 推送 GHCR
+#    push -> v* 标签    同上（额外打 semver 标签，如 v8.15 -> 8.15）
+#    pull_request       只构建 + 冒烟校验，不推送
+#    workflow_dispatch  手动运行，可勾选导出 tar.gz 离线镜像包
+#
+#  产物：ghcr.io/<owner>/saoml:{8.15, latest, sha-xxxxxxx}
+#
+#  说明：
+#    1. 只构建 linux/amd64 —— CentOS 7 的 yum 源与安装器都是 x86_64，
+#       arm64 需要额外的 altarch 源，本镜像不涉及。
+#    2. 不在 CI 里跑容器：centos:7 的 systemd 219 要 cgroup v1 +
+#       privileged，GitHub 托管 runner 是 cgroup v2，跑不起来。
+#       所以只做「静态冒烟校验」（文件齐不齐、分卷有没有合并）。
+# ============================================================
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      export_tar:
+        description: "额外导出镜像 tar.gz（可下载后 docker load，离线部署用）"
+        type: boolean
+        default: false
+
+# 同一分支连推时，取消上一次未完成的构建
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: saoml
+
+jobs:
+  build:
+    name: build (linux/amd64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # GHCR 要求仓库路径全小写，owner 里可能有大小写，统一转小写
+      - name: 计算镜像名
+        id: img
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "镜像名：$image"
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 生成镜像标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.image }}
+          tags: |
+            type=raw,value=8.15
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+          labels: |
+            org.opencontainers.image.title=SaoML 8.15 offline kit
+            org.opencontainers.image.description=CentOS 7 + systemd + SaoML panel offline installer
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: 构建镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          # load 让镜像留在本地，后面冒烟校验和 docker save 都要用
+          load: true
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # 关掉 provenance，否则产物是 manifest list，load/save 行为不一致
+          provenance: false
+
+      - name: 冒烟校验
+        run: |
+          set -euo pipefail
+          img="$(printf '%s\n' '${{ steps.meta.outputs.tags }}' | head -n1)"
+          echo "校验镜像：$img"
+
+          docker run --rm --entrypoint /bin/bash "$img" -c '
+            set -e
+            echo "--- 离线套件 ---"
+            test -x /opt/offline_kit/xsaoml
+            test -x /opt/offline_kit/httpserver
+            test -x /opt/offline_kit/offline_install.sh
+            test -x /opt/offline_kit/cracked_stage5.sh
+            test -d /opt/offline_kit/oss_yum_php_el7
+            test -d /opt/offline_kit/file_8.15
+
+            echo "--- 面板包分卷是否已合并 ---"
+            size=$(stat -c%s /opt/offline_kit/file_8.15/web-8.15.zip)
+            echo "web-8.15.zip = $((size / 1024 / 1024)) MB"
+            test "$size" -gt 40000000
+
+            echo "--- 安装器前置修复 ---"
+            test -x /usr/sbin/setenforce
+            grep -q "^SELINUX=disabled" /etc/selinux/config
+            test -x /usr/local/bin/entrypoint.sh
+            command -v expect >/dev/null
+            command -v ssh >/dev/null
+            command -v unzip >/dev/null
+
+            echo "--- 容器内 sshd 端口 ---"
+            grep -q "^Port 2222" /etc/ssh/sshd_config
+            test -f /etc/ssh/ssh_host_rsa_key
+
+            echo "--- .git 不应进镜像 ---"
+            test ! -d /opt/offline_kit/.git
+
+            echo "smoke test OK"
+          '
+
+      - name: 导出离线镜像包
+        if: github.event_name == 'workflow_dispatch' && inputs.export_tar
+        run: |
+          img="$(printf '%s\n' '${{ steps.meta.outputs.tags }}' | head -n1)"
+          docker save "$img" | gzip -1 > saoml-8.15-amd64.tar.gz
+          ls -lh saoml-8.15-amd64.tar.gz
+
+      - name: 上传离线镜像包
+        if: github.event_name == 'workflow_dispatch' && inputs.export_tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: saoml-8.15-amd64
+          path: saoml-8.15-amd64.tar.gz
+          # tar.gz 已压缩，避免二次压缩浪费时间
+          compression-level: 0
+          retention-days: 7
+
+      - name: 写入任务摘要
+        if: always()
+        run: |
+          img="${{ steps.img.outputs.image }}"
+          {
+            echo "### SaoML 8.15 镜像构建"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 镜像 | \`$img\` |"
+            echo "| 标签 | $(printf '%s' '${{ steps.meta.outputs.tags }}' | tr '\n' ' ') |"
+            echo "| 平台 | linux/amd64 |"
+            echo ""
+            if [ "${{ github.event_name }}" != "pull_request" ]; then
+              echo "#### 在服务器上拉取"
+              echo '```bash'
+              echo "docker pull $img:8.15"
+              echo "docker tag $img:8.15 saoml:8.15   # compose 里写的是 saoml:8.15"
+              echo "cd docker && docker compose up -d"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

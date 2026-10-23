@@ -1,4 +1,12 @@
+# 版本库与 CI 元数据不进镜像（.git 可达 70MB+，会被 COPY . 一起拷进去）
+.git/
+.github/
+.gitignore
+
+# 本地分析/缓存
 .workbuddy/
+
+# 运行产物
 *.tar
 *.tar.gz
 *.log
